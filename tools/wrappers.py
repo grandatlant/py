@@ -8,6 +8,7 @@ __copyright__ = 'Copyright (C) 2025 grandatlant'
 
 __all__ = [
     'wrap_with_calls',
+    'wrap_with',
     'call_before',
     'call_after',
 ]
@@ -130,6 +131,24 @@ def wrap_with_calls(
         return decorated_func_wrapper
     return decorator
 
+def wrap_with(
+    func_before = None,
+    func_after = None,
+    *func_args,
+    args: tuple = None,
+    kwds: dict = None,
+    return_filter_func: callable = None,
+    reduce_result_func: callable = None,
+) -> callable:
+    return wrap_with_calls(
+        first_call=func_before,
+        after_call=func_after,
+        args=(*func_args, *(args or tuple())),
+        kwds=kwds,
+        return_filter_func=return_filter_func,
+        reduce_result_func=reduce_result_func,
+        )
+
 def call_before(
     func,
     *func_args,
@@ -140,7 +159,7 @@ def call_before(
 ) -> callable:
     return wrap_with_calls(
         first_call=func,
-        args=(*func_args, *args),
+        args=(*func_args, *(args or tuple())),
         kwds=kwds,
         return_filter_func=return_filter_func,
         reduce_result_func=reduce_result_func,
@@ -156,7 +175,7 @@ def call_after(
 ) -> callable:
     return wrap_with_calls(
         after_call=func,
-        args=(*func_args, *args),
+        args=(*func_args, *(args or tuple())),
         kwds=kwds,
         return_filter_func=return_filter_func,
         reduce_result_func=reduce_result_func,
