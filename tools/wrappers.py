@@ -3,99 +3,70 @@
 """Decorators and other tools to enhance function usage.
 """
 
-__version__ = '0.0.1'
+__version__ = '1.0.0'
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
 __all__ = [
     'wrap_with_calls',
+    'call_before',
+    'call_after',
 ]
 
 import functools
 
 def wrap_with_calls(
     func: callable = None,
-    /,
-    *,
-    first_call = None,
-    after_call = None,
+    *func_args,
+    first_call: callable = None,
+    after_call: callable = None,
     args: tuple = None,
     kwds: dict = None,
     return_filter_func: callable = None,
     reduce_result_func: callable = None,
     ) -> callable:
-    """Used to call something before and after decorated function call.
-    Params:
-        func - a single function to call before AND after
+    """Decorator to execute specified functions
+    before and after the decorated function.
+
+    Parameters:
+        func (Callable):
+            a single function to call before AND after
             the decorated function called.
-            
-            If applyed as decorator with no (), if transforms this function
-            into decorator, that does something like next:
-    
-                @wrap_with_calls
-                def print_yum():
-                    print('yum')
+            if wrap_with_calls used without (), transforms func
+            into decorator, can be applied to other functions
+        first_call (Callable or Iterable[Callable]):
+            Function(s) to call before the decorated function.
+        after_call (Callable or Iterable[Callable]):
+            Function(s) to call after the decorated function.
+        args (Tuple):
+            Positional arguments to pass to all callables.
+        kwds (Dict):
+            Keyword arguments to pass to all callables.
+        return_filter_func (Callable):
+            Filter function to apply to return values of callables.
+        reduce_result_func (Callable):
+            Function to reduce results of all calls into one value.
 
-                @print_yum
-                def spit():
-                    print('spit')
-                
-                spit()
-
-            will result in next console output:
-                yum
-                spit
-                yum
-                
-        first_call - callable or collection yielding callables to be called
-            before decorated function
-            
-        after_call - callable or collection yielding callables to be called
-            after decorated function
-            
-        args, kwds - positional and keyword arguments
-            that will be passed to ALL callables
-            in (*first_call, func, func, *after_call)
-
-        return_filter_func - if specified, application this to any of the
-            returns wraping functions will result in wrapped function return
-
-            
+    Returns:
+        Callable: The decorated function.
     """
 
-    #list of callables need to be called before decorated_func called
-    _first_call = list()
-    if first_call is None:
-        pass
-    elif callable(first_call):
-        _first_call.append(first_call)
-    elif hasattr(first_call, '__iter__'):
-        _first_call.extend(first_call)
-    else:
-        raise ValueError('"first_call" parameter must be callable or iterable')
-    #'func' call AFTER all 'first_call' calls
-    if func is not None and callable(func):
-        _first_call.append(func)
-
-    #list of callables need to be called after_call decorated_func called
-    _after_call = list()
-    #'func' call BEFORE all 'first_call' calls
-    if func is not None and callable(func):
-        _after_call.append(func)
-    if after_call is None:
-        pass
-    elif callable(after_call):
-        _after_call.append(after_call)
-    elif hasattr(after_call, '__iter__'):
-        _after_call.extend(after_call)
-    else:
-        raise ValueError('"after_call" parameter must be callable or iterable')
-
+    def list_of_callables(callables):
+        """Ensure the input is an iterable of callables."""
+        if callables is None:
+            return list()
+        elif callable(callables):
+            return list((callables,))
+        elif hasattr(callables, '__iter__'):
+            return list(callables)
+        else:
+            # I dont want exceptions here for dynamic use
+            return list()
+            #raise ValueError(f'Parameter "{callables}" '
+            #                 'must be a callable '
+            #                 'or an iterable of callables.')
+    
     _args = args or tuple()
     _kwds = kwds or dict()
-    _return_filter_enabled = (
-        return_filter_func is not None
-        and callable(return_filter_func)
-    )
     
     @functools.wraps(func)
     def decorator(decorated_func):
@@ -105,15 +76,24 @@ def wrap_with_calls(
             **decorated_func_kwds
         ):
             results = list()
+
             # first calls
-            for item in _first_call:
+            for item in list_of_callables(first_call):
                 if callable(item):
                     cur_result = item(*_args, **_kwds)
-                    if (_return_filter_enabled
+                    if (callable(return_filter_func)
                         and return_filter_func(cur_result)):
                         return cur_result
                     results.append(cur_result)
-            
+
+            # func before decorated_func
+            if callable(func):
+                func_result = func(*func_args, *_args, **_kwds)
+                if (callable(return_filter_func)
+                    and return_filter_func(func_result)):
+                    return func_result
+                results.append(func_result)
+
             # !!! decorated_func call !!!
             decorated_func_result = decorated_func(
                 *decorated_func_args,
@@ -123,19 +103,26 @@ def wrap_with_calls(
             #if return_filter_func(decorated_func_result):
             #    return decorated_func_result
             results.append(decorated_func_result)
-            
+
+            # func after decorated_func
+            if callable(func):
+                func_result = func(*func_args, *_args, **_kwds)
+                if (callable(return_filter_func)
+                    and return_filter_func(func_result)):
+                    return func_result
+                results.append(func_result)
+
             # after calls
-            for item in _after_call:
+            for item in list_of_callables(after_call):
                 if callable(item):
                     cur_result = item(*_args, **_kwds)
-                    if (_return_filter_enabled
+                    if (callable(return_filter_func)
                         and return_filter_func(cur_result)):
                         return cur_result
                     results.append(cur_result)
             
             # reduce results if specified
-            if (reduce_result_func is not None
-                and callable(reduce_result_func)):
+            if callable(reduce_result_func):
                 return functools.reduce(reduce_result_func, results)
             
             # general result
@@ -145,14 +132,15 @@ def wrap_with_calls(
 
 def call_before(
     func,
+    *func_args,
     args: tuple = None,
     kwds: dict = None,
     return_filter_func: callable = None,
     reduce_result_func: callable = None,
-):
+) -> callable:
     return wrap_with_calls(
         first_call=func,
-        args=args,
+        args=(*func_args, *args),
         kwds=kwds,
         return_filter_func=return_filter_func,
         reduce_result_func=reduce_result_func,
@@ -160,14 +148,15 @@ def call_before(
 
 def call_after(
     func,
+    *func_args,
     args: tuple = None,
     kwds: dict = None,
     return_filter_func: callable = None,
     reduce_result_func: callable = None,
-):
+) -> callable:
     return wrap_with_calls(
         after_call=func,
-        args=args,
+        args=(*func_args, *args),
         kwds=kwds,
         return_filter_func=return_filter_func,
         reduce_result_func=reduce_result_func,
