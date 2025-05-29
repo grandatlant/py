@@ -7,25 +7,131 @@ __version__ = '1.0.0'
 __copyright__ = 'Copyright (C) 2025 grandatlant'
 
 __all__ = [
+    'log_perf_counter',
     'wrap_with_calls',
     'wrap_with',
     'call_before',
     'call_after',
 ]
 
+import time
+import logging
 import functools
 
+from typing import Callable
+
+def log_perf_counter(
+    param = None,
+    /,
+    *,
+    perf_counter: Callable = time.perf_counter,
+    logger: logging.Logger = None,
+    level: int = logging.DEBUG,
+    log_call: bool = False,
+    log_args: bool = False,
+    ) -> Callable:
+    r"""Decorator for performance measurement purposes,
+    using perf_counter parameter as callable (default time.perf_counter_ns)
+
+    Parameters:
+        param (Callable | None):
+            function to be decorated when using @log_perf_counter
+            with no perenteses with all default parameters.
+            Default value: None
+        perf_counter (Callable):
+            function with no arguments, returning value
+            with '__sub__' method implemented to determine time-delta, 
+            waisted for decorated function call.
+            Default value: time.perf_counter
+        logger (logging.Logger):
+            object to use 'log' method for logging decorator activity.
+            'log' method called with parameters
+                level: int = level for logging
+                msg: str = log message
+            Default value: None
+                logging.getLogger() called in this case
+                for each decorated function in format
+                '__module__.__name__'
+        level (int):
+            level for new log messages.
+            Default value: logging.DEBUG
+        log_call (bool):
+            boolean flag for logging additional information about
+            perf_counter when function call starts and ends
+            Default value: False
+        log_args (bool):
+            boolean flag for logging additional information about
+            args and kwargs passed to decorated function.
+            WARNING! Can be resourse-expensive while getting args repr
+            Default value: False
+
+    Returns:
+        Callable: The decorator or wrapper function depends on param
+    """
+    def decorator(func):
+        _func_trace = '%s.%s' % (
+            func.__module__,
+            func.__name__,
+        )
+        _logger = logger or logging.getLogger(_func_trace)
+
+        @functools.wraps(func)
+        def wrapper(*func_args, **func_kwds):
+            _func_call_trace = _func_trace
+            if log_args:
+                _func_call_trace = '{func}(*{args}, **{kwds})'.format(
+                    func = _func_trace,
+                    args = func_args,
+                    kwds = func_kwds,
+                )
+            
+            if log_call:
+                _logger.log(level, 'Call %s start.' % _func_call_trace)
+            
+            pc_before = perf_counter()
+            func_return = func(*func_args, **func_kwds)
+            pc_after = perf_counter()
+            pc_delta = pc_after - pc_before
+            
+            if log_call:
+                _logger.log(
+                    level,
+                    'Call %s finish. '
+                    'Start: %s. '
+                    'Finish: %s. '
+                    'Delta: %s.' % (
+                        _func_call_trace,
+                        pc_before,
+                        pc_after,
+                        pc_delta,
+                    )
+                )
+            
+            _logger.log(level, '%s call time: %s' % (
+                _func_trace,
+                pc_delta,
+            ))
+            
+            return func_return
+        
+        return wrapper
+
+    if param is None:
+        return decorator
+    return decorator(param)
+
+
 def wrap_with_calls(
-    func: callable = None,
+    func = None,
     *func_args,
-    first_call: callable = None,
-    after_call: callable = None,
+    first_call: Callable = None,
+    after_call: Callable = None,
     args: tuple = None,
     kwds: dict = None,
-    return_filter_func: callable = None,
-    reduce_result_func: callable = None,
-    ) -> callable:
-    """Decorator to execute specified functions
+    return_filter_func: Callable = None,
+    reduce_result_func: Callable = None,
+    ) -> Callable:
+    r"""Decorator to execute specified functions
     before and after the decorated function.
 
     Parameters:
@@ -131,15 +237,21 @@ def wrap_with_calls(
         return decorated_func_wrapper
     return decorator
 
+
 def wrap_with(
     func_before = None,
     func_after = None,
     *func_args,
     args: tuple = None,
     kwds: dict = None,
-    return_filter_func: callable = None,
-    reduce_result_func: callable = None,
-) -> callable:
+    return_filter_func: Callable = None,
+    reduce_result_func: Callable = None,
+) -> Callable:
+    r"""Wrapper for 'wrap_with_calls' decorator
+    for call 'func_before' before decorated function
+    and then call 'func_after' after decorated function execution.
+    Next positional decorator arguments passed to both callables.
+    """
     return wrap_with_calls(
         first_call=func_before,
         after_call=func_after,
@@ -149,14 +261,19 @@ def wrap_with(
         reduce_result_func=reduce_result_func,
         )
 
+
 def call_before(
     func,
     *func_args,
     args: tuple = None,
     kwds: dict = None,
-    return_filter_func: callable = None,
-    reduce_result_func: callable = None,
-) -> callable:
+    return_filter_func: Callable = None,
+    reduce_result_func: Callable = None,
+) -> Callable:
+    r"""Wrapper for 'wrap_with_calls' decorator
+    for call 'func' before decorated function execution.
+    Next positional decorator arguments passed to callable 'func'.
+    """
     return wrap_with_calls(
         first_call=func,
         args=(*func_args, *(args or tuple())),
@@ -165,14 +282,19 @@ def call_before(
         reduce_result_func=reduce_result_func,
         )
 
+
 def call_after(
     func,
     *func_args,
     args: tuple = None,
     kwds: dict = None,
-    return_filter_func: callable = None,
-    reduce_result_func: callable = None,
-) -> callable:
+    return_filter_func: Callable = None,
+    reduce_result_func: Callable = None,
+) -> Callable:
+    r"""Wrapper for 'wrap_with_calls' decorator
+    for call 'func' after decorated function execution.
+    Next positional decorator arguments passed to callable 'func'.
+    """
     return wrap_with_calls(
         after_call=func,
         args=(*func_args, *(args or tuple())),
