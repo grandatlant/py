@@ -108,7 +108,7 @@ def log_perf_counter(
                 )
             
             _logger.log(level, '%s call time: %s' % (
-                _func_trace,
+                _func_call_trace,
                 pc_delta,
             ))
             
